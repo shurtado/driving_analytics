@@ -6,7 +6,7 @@ import datetime
 import fnmatch
 import os
 
-def format(data):
+def formatData(data):
 
     return {
         'time': datetime.datetime.fromtimestamp(int(data[0]) / 1000),
@@ -19,7 +19,7 @@ def format(data):
         'engine_running': True if data[12] == 'true' else False
     }
 
-def parse(filename):
+def parseData(filename):
 
     data = []
 
@@ -33,11 +33,38 @@ def parse(filename):
 
                 line = line.strip().split(':')
 
-                datum = format(line)
+                datum = formatData(line)
 
                 data.append(datum)
 
     return data
+
+
+def formatMeta(meta):
+
+    meta['start_time'] = datetime.datetime.strptime(meta['start_time'], '%Y-%m-%d %H:%M:%S.%f')
+
+    return meta
+
+def parseMeta(filename):
+
+    meta = {}
+
+    with open(filename) as f:
+
+        for line in f.readlines():
+
+            try:
+                key, val = line.strip().split(': ')
+
+                key = key.lower().replace(' ', '_')
+
+                meta[key] = val
+
+            except:
+                pass
+
+    return formatMeta(meta)
 
 
 if __name__ == "__main__":
@@ -50,8 +77,10 @@ if __name__ == "__main__":
 
     pipe = 'example'
 
+    filter = None
+
     try:
-        opts, args = getopt.getopt(sys.argv[1:], '', ['path=', 'pipe='])
+        opts, args = getopt.getopt(sys.argv[1:], '', ['path=', 'pipe=', 'filter='])
     except getopt.GetoptError:
         print 'parser.py --path <path> --pipe <pipe>'
         sys.exit(2)
@@ -61,6 +90,8 @@ if __name__ == "__main__":
             path = arg
         elif opt == '--pipe':
             pipe = arg
+        elif opt == '--filter':
+            filter = arg
 
 
     """
@@ -70,22 +101,54 @@ if __name__ == "__main__":
     print 'Looking:', path
 
     files = []
+
     for root, dirnames, filenames in os.walk(path):
-        for filename in fnmatch.filter(filenames, 'carData.txt'):
-            files.append(os.path.join(root, filename))
+
+        info = []
+
+        for f in ['drivingTaskLog.txt', 'carData.txt']:
+            for filename in fnmatch.filter(filenames, f):
+                info.append(os.path.join(root, filename))
+
+        if len(info) == 2:
+            files.append(info)
 
     data = []
 
-    for f in files:
-        print 'Reading:', f
-        data.append(parse(f))
+    for m, d in files:
+        print 'Reading:\n  ', m, '\n  ', d
+        data.append({'meta': parseMeta(m), 'data': parseData(d)})
+
+
+    """
+    Filter data
+    """
+
+    if filter:
+
+        print 'Filtering:', filter
+
+        filtered = []
+        
+        try:
+            key, val = filter.split('=')
+
+            for datum in data:
+
+                if datum['meta'][key] == val:
+                    filtered.append(datum)
+
+        except:
+            pass
+
+        data = filtered
 
 
     """
     Pipe output
     """
 
-    print 'Piping to:', pipe
+    print 'Piping to:', pipe, '\n'
 
     module = __import__(pipe)
 
